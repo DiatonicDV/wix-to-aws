@@ -1,0 +1,72 @@
+	
+service: wix-to-aws
+ 
+# frameworkVersion: ">=1.1.0 <=3.10.2"
+
+plugins:
+  - serverless-python-requirements
+  
+provider:
+  name: aws
+  runtime: python3.8
+  stage: dev
+  region: us-east-1
+  profile: work_us
+  environment:
+    DYNAMODB_TABLE: "weaving-users-tier-table"
+    COGNITO_APP_CLIENT_ID: "toset"
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - cloudwatch:*
+      Resource: "*"
+  # apiGateway:
+  #   restApiId: ${ssm:/weaving/dev/api-gtw-id}
+  #   restApiRootResourceId: ${ssm:/weaving/dev/api-gtw-root-resource-id}
+ 
+functions:
+  userSignup:
+    handler: functions/wix-to-aws-signup.lambda_handler
+    memorySize: 128
+    description: Add user to cognito and database
+    events:
+      - http: 
+          path: signup
+          method: post
+          # authorizer:
+          #   arn: arn:aws:cognito-idp:eu-west-1:135588427727:userpool/eu-west-1_vtLeKhAV1
+          #   scopes:
+          #     - 	weaving.crud.backend/api.get
+
+  functions:
+  userConversion:
+    handler: functions/wix-to-aws-conversion.lambda_handler
+    memorySize: 128
+    description: Submit user information.
+    events:
+      - http: 
+          path: conversion
+          method: post
+          # authorizer:
+          #   arn: arn:aws:cognito-idp:eu-west-1:135588427727:userpool/eu-west-1_vtLeKhAV1
+          #   scopes:
+          #     - 	weaving.crud.backend/api.get
+
+resources:
+  Resources:
+    UsersTierTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: "id"
+            AttributeType: "S" 
+        KeySchema:
+          - AttributeName: "id"
+            KeyType: "HASH"
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: "NEW_AND_OLD_IMAGES"
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}-${opt:stage, self:provider.stage}
