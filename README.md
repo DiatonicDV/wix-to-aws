@@ -1,3 +1,7 @@
+# Description
+
+This project is a serverless application built using the Serverless Framework and Infrastructure as Code (IaC) principles. It facilitates the seamless integration of new users from Wix into AWS services, such as DynamoDB or Cognito. By automating this process, it streamlines user management tasks and ensures efficient data synchronization between Wix and AWS.
+
 # Setup 
 
 1. Installa Choco and Terraform 
@@ -27,3 +31,11 @@ serverless deploy
 ```
 
 4. Su Wix sotto *Automazioni* creare un'automazione che ha come target l'url degli API gateway generati.
+
+# License
+
+This project is licensed under the MIT License, allowing for unrestricted use, modification, and distribution.
+
+# Disclaimer
+
+This project is provided as-is without any warranties. Users are responsible for understanding and complying with the terms and conditions of the services utilized, such as AWS and Wix.
