@@ -1,115 +1,71 @@
-#lambda to turn off ec2 instance
+#lambda provide information about new user that subscribe a payment plan on Wix to DynamoDB or Cognito
+
 import boto3
 import json
 import os
 import logging
 
 logging.basicConfig(level=logging.INFO)
-# Set up AWS Cognito client
-cognito = boto3.client('cognito-idp', region_name=os.getenv('REGION'))  
-dynamodb = boto3.resource('dynamodb', region_name=os.getenv('REGION'))
-table = dynamodb.Table(os.getenv('DYNAMODB_TABLE'))
+cognito_client = boto3.client('cognito-idp', region_name=os.getenv('REGION'))
+dynamodb_client = boto3.client('dynamodb', region_name=os.getenv('REGION'))
+table = dynamodb_client.Table(os.getenv('DYNAMODB_TABLE'))
 
-
-def signup_zapier_user(username, password, name, surname, email):
-    """
-    Sign up a new user in AWS Cognito.
-    Uses event data from Zapier to create a new user.
-    Returns the user's UserSub.
-    """
-    try:
-        #check if user already exists
-        #TODO
-
-        #add user to Cognito
-        response = cognito.sign_up(
-            ClientId=os.getenv('COGNITO_APP_CLIENT_ID'),
-            Username=username,
-            Password=password,
-            UserAttributes=[
-                {'Name': 'email', 'Value': email},
-                {'Name': 'given_name', 'Value': name},
-                {'Name': 'family_name', 'Value': surname}
-            ]
-        )
-        # User signup successful
-        return response['UserSub']
-
-    except Exception as e:
-        print(f"User signup failed: {e}")
-
-def signup_wix_user(username, password, name, surname, email):
+def signup_cognito_user(poolId, group, email, password, first_name, last_name, phone, prefix, birthdate, address):
     """
     Sign up a new user in AWS Cognito.
     Uses event data from Wix webook to create a new user.
     Returns the user's UserSub.
     """
     try:
-
-         #check if user already exists
-        #TODO
-
-        #add to Cognito
-        # response = cognito.sign_up(
-        #     ClientId=os.getenv('COGNITO_APP_CLIENT_ID'),
-        #     Username=username,
-        #     Password=password,
-        #     UserAttributes=[
-        #         {'Name': 'email', 'Value': email},
-        #         {'Name': 'given_name', 'Value': name},
-        #         {'Name': 'family_name', 'Value': surname}
-        #     ]
-        # )
-        
-        #add to DynamoDB table
-        key = {
-                'email': email,
-                # 'given_name': name,
-                # 'family_name': surname
-              }
-        if table.get_item(Key=key):
-            print("user exists")
-            #user exists
-            table.update_item(
-                Key=key,
-                UpdateExpression="set tier = :u",
-                ExpressionAttributeValues={
-                    ':u': "free"
-                }
+        response = cognito_client.admin_create_user(
+                UserPoolId=poolId,
+                Username=email,
+                TemporaryPassword= password,
+                UserAttributes=[{"Name": "email","Value": email},  #see them here: https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-attributes.html
+                                {"Name": "email_verified", "Value": "true"},
+                                {"Name": "family_name", "Value": first_name},
+                                {"Name": "name", "Value": last_name},
+                                {"Name": "phone_number", "Value": prefix+phone},
+                                {"Name": "birthdate", "Value": birthdate},
+                                {"Name": "address", "Value": address}
+                ]
             )
-        else:
-            #add user
-            print("adding user")
-            table.put_item(Item=key)
-        
-        # User signup successful
-        # return response['UserSub']
-        return "success"
+        reply = client.admin_add_user_to_group( UserPoolId=poolId, Username=email, GroupName=group )
 
     except Exception as e:
         print(f"User signup failed: {e}")
 
+def add_to_dynamodb(email, tier):
+    '''
+    Update the tier of the recently added user.
+    ''' 
+    key = {"email": email}
+    update_expression = "SET tier = :new_value"
+    expression_values = {":new_value": tier}
+    
+    try:
+        response = table.update_item(
+            Key=key,
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+        )
+        print("Item updated successfully:", response)
+    except Exception as e:
+        print("Error updating item:", e)
+    
 def lambda_handler(event, context):
 
-    print(event)
-    data = json.loads(event.replace("\\"," "))['data']
-    
-    # Example usage
-    # username = event.username #FIXME: add to zap
-    # password = event.password #FIXME: add to zap
-    # email = event.email
-    # name =event.name
-    # surname = event.surname
-    username = "test"
-    password = "XXXX"
-    name = "test"
-    surname = "test"
-    email = json.loads(data['body'].replace("\\"," "))['data']['contact']['email'] 
-    user_sub = signup_wix_user(username, password, name, surname, email)
+    first_name = json.loads(event['body'].replace("\\"," "))['data']['contact']['name']['first']
+    last_name = json.loads(event['body'].replace("\\"," "))['data']['contact']['name']['last']
+    phone = json.loads(event['body'].replace("\\"," "))['data']['contact']['phones'][0]['phone']
+    address = json.loads(event['body'].replace("\\"," "))['data']['contact']['address']['addressLine']
+    email = json.loads(event['body'].replace("\\"," "))['data']['contact']['email']
+    tier = json.loads(event['body'].replace("\\"," "))['data']['plan_title']
 
-    print(f"User successfully signed up. UserSub: {user_sub}")
+    add_to_dynamodb(email, tier)
+    signup_cognito_user(os.getenv('COGNITO_POOL_ID'), os.getenv('COGNITO_GROUP'), email, os.getenv('COGNITO_PASSWORD'), first_name, last_name, phone, os.getenv('PHONE_PREFIX'), "01/01/1999", address)
         
     return {
         'statusCode': 200,
-        'body': json.dumps('EC2 instance stopped!')
+        'body': json.dumps('User added!')
     }

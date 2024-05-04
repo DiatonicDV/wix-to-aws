@@ -10,11 +10,10 @@ provider:
   name: aws
   runtime: python3.8
   stage: dev
-  region: us-east-1
+  region: ${param:REGION}
   profile: work_us
   environment:
     DYNAMODB_TABLE: "weaving-users-tier-table"
-    COGNITO_APP_CLIENT_ID: "toset"
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -28,7 +27,14 @@ functions:
   userSignup:
     handler: functions/wix-to-aws-signup.lambda_handler
     memorySize: 128
-    description: Add user to cognito and database
+    description: Add user to cognito and dynamodb
+    environment:
+      DYNAMODB_TABLE: ${self:provider.environment.DYNAMODB_TABLE}-${opt:stage, self:provider.stage}
+      REGION: ${param:REGION}
+      COGNITO_POOL_ID: ${param:COGNITO_POOL_ID}
+      COGNITO_GROUP: ${param:COGNITO_GROUP}
+      COGNITO_PASSWORD: ${param:COGNITO_PASSWORD}
+      PHONE_PREFIX: "+39"
     events:
       - http: 
           path: signup
@@ -43,6 +49,13 @@ functions:
     handler: functions/wix-to-aws-conversion.lambda_handler
     memorySize: 128
     description: Submit user information.
+    environment:
+      DYNAMODB_TABLE: ${self:provider.environment.DYNAMODB_TABLE}-${opt:stage, self:provider.stage}
+      REGION: ${param:REGION}
+      COGNITO_POOL_ID: ${param:COGNITO_POOL_ID}
+      COGNITO_GROUP: ${param:COGNITO_GROUP}
+      COGNITO_PASSWORD: ${param:COGNITO_PASSWORD}
+      PHONE_PREFIX: "+39"
     events:
       - http: 
           path: conversion
@@ -59,10 +72,10 @@ resources:
       DeletionPolicy: Retain
       Properties:
         AttributeDefinitions:
-          - AttributeName: "id"
+          - AttributeName: "email"
             AttributeType: "S" 
         KeySchema:
-          - AttributeName: "id"
+          - AttributeName: "email"
             KeyType: "HASH"
         ProvisionedThroughput:
           ReadCapacityUnits: 1

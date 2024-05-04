@@ -1,0 +1,1 @@
+serverless deploy --param="REGION=" --param="COGNITO_POOL_ID=" --param="COGNITO_GROUP=" --param="COGNITO_PASSWORD="
