@@ -4,11 +4,34 @@ import boto3
 import json
 import os
 import logging
+import base64
+import hmac
+import hashlib
+import time
+import json 
 
 logging.basicConfig(level=logging.INFO)
 cognito_client = boto3.client('cognito-idp', region_name=os.getenv('REGION'))
 dynamodb_client = boto3.client('dynamodb', region_name=os.getenv('REGION'))
 table = dynamodb_client.Table(os.getenv('DYNAMODB_TABLE'))
+
+def validate_signature(event, secret):
+ signature = event.headers['X-Answers-Signature']
+ print('signature: [' + signature + ']')
+ digest = hmac.new(secret, event, hashlib.sha256).digest()
+ computed_signature = base64.encodestring(digest).strip('\n').strip('\t')
+ print('computed_signature: [' + computed_signature + ']')
+ # NOTICE - Simple string comparisons not secure against timing attacks!!
+ return computed_signature == signature
+
+def validate_timestamp(event):
+ json_body = json.loads(event)
+ timestamp = json_body['timestamp']
+ current_timestamp = int(round(time.time() * 1000))
+ seconds_interval = (current_timestamp - timestamp) / 1000
+ print('seconds interval: ' + str(seconds_interval))
+ # define the desired second interval to prevent repeat attacks
+ return seconds_interval < 10
 
 def signup_cognito_user(poolId, group, email, password, first_name, last_name, phone, prefix, birthdate, address):
     """
@@ -55,15 +78,20 @@ def add_to_dynamodb(email, tier):
     
 def lambda_handler(event, context):
 
-    first_name = json.loads(event['body'].replace("\\"," "))['data']['contact']['name']['first']
-    last_name = json.loads(event['body'].replace("\\"," "))['data']['contact']['name']['last']
-    phone = json.loads(event['body'].replace("\\"," "))['data']['contact']['phones'][0]['phone']
-    address = json.loads(event['body'].replace("\\"," "))['data']['contact']['address']['addressLine']
-    email = json.loads(event['body'].replace("\\"," "))['data']['contact']['email']
-    tier = json.loads(event['body'].replace("\\"," "))['data']['plan_title']
+    #Wix secret validation: https://help.wixanswers.com/kb/en/article/securing-webhooks
+    is_valid_timestamp = validate_timestamp(event, os.getenv('SECRET'))
+    is_valid_signature = validate_signature(event)
+    if is_valid_signature and is_valid_timestamp:
 
-    add_to_dynamodb(email, tier)
-    signup_cognito_user(os.getenv('COGNITO_POOL_ID'), os.getenv('COGNITO_GROUP'), email, os.getenv('COGNITO_PASSWORD'), first_name, last_name, phone, os.getenv('PHONE_PREFIX'), "01/01/1999", address)
+        first_name = json.loads(event['body'].replace("\\"," "))['data']['contact']['name']['first']
+        last_name = json.loads(event['body'].replace("\\"," "))['data']['contact']['name']['last']
+        phone = json.loads(event['body'].replace("\\"," "))['data']['contact']['phones'][0]['phone']
+        address = json.loads(event['body'].replace("\\"," "))['data']['contact']['address']['addressLine']
+        email = json.loads(event['body'].replace("\\"," "))['data']['contact']['email']
+        tier = json.loads(event['body'].replace("\\"," "))['data']['plan_title']
+
+        add_to_dynamodb(email, tier)
+        signup_cognito_user(os.getenv('COGNITO_POOL_ID'), os.getenv('COGNITO_GROUP'), email, os.getenv('COGNITO_PASSWORD'), first_name, last_name, phone, os.getenv('PHONE_PREFIX'), "01/01/1999", address)
         
     return {
         'statusCode': 200,
