@@ -30,7 +30,7 @@ def signup_cognito_user(poolId, group, email, password, first_name, last_name, p
                                 {"Name": "address", "Value": address}
                 ]
             )
-        reply = client.admin_add_user_to_group( UserPoolId=poolId, Username=email, GroupName=group )
+        reply = cognito_client.admin_add_user_to_group( UserPoolId=poolId, Username=email, GroupName=group )
 
     except Exception as e:
         print(f"User signup failed: {e}")
